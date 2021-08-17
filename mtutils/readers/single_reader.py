@@ -15,6 +15,6 @@ class TxtReader(BaseReader):
         with open(self.path) as file:
             for i, line in enumerate(file):
                 if self.max_lines and i > self.max_lines:
-                    raise StopIteration
+                    return
                 if not (self.skip_first_n and i in range(self.skip_first_n)):
                     yield line.strip("\n")
