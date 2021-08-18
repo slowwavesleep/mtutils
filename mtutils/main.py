@@ -1,17 +1,23 @@
 from readers.single_reader import TxtReader
-from models.translation import TranslationPair, TranslationDataset
+from models.translation import TranslationDataset
 
 source_path = "data/paracrawl-release1.en-ru.zipporah0-dedup-clean.en"
 target_path = "data/paracrawl-release1.en-ru.zipporah0-dedup-clean.ru"
 
-source_reader = TxtReader(source_path, max_lines=20_000)
-target_reader = TxtReader(target_path, max_lines=20_000)
+source_reader = TxtReader(source_path, max_lines=100_000)
+target_reader = TxtReader(target_path, max_lines=100_000)
 
-dataset = TranslationDataset([])
+dataset = TranslationDataset(
+    source_reader=source_reader, target_reader=target_reader, source_name="en", target_name="ru"
+)
 
-for i, (source, target) in enumerate(zip(source_reader.read_examples(), target_reader.read_examples())):
-    pair = TranslationPair(idx=i, source_name="ru", source=source, target=target, target_name="en")
-    dataset.add_pair(pair)
-
-dataset.downsample(0.25)
-dataset.write_to_file("check.jsonl")
+dataset.read_examples()
+dataset.filter_identical()
+dataset.filter_urls()
+dataset.filter_by_ratio()
+dataset.filter_by_tokens()
+dataset.filter_by_char_len()
+dataset.filter_by_n_token_diff()
+dataset.filter_by_common_ratio()
+dataset.downsample(keep_n=3000, seed=42)
+dataset.write_to_file("paracrawl_filtered.jsonl")

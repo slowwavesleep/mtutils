@@ -1,8 +1,12 @@
-from typing import List, Optional
+from typing import Optional
+from abc import ABC, abstractmethod
 
 
-class BaseReader:
-    pass
+class BaseReader(ABC):
+
+    @abstractmethod
+    def read_examples(self):
+        ...
 
 
 class TxtReader(BaseReader):
