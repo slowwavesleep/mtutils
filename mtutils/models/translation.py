@@ -7,8 +7,10 @@ import warnings
 from dataclasses import dataclass
 from typing import List, Optional
 
+import torch
 from rapidfuzz import fuzz
 from tqdm import tqdm
+from sentence_transformers import SentenceTransformer, util
 
 
 @dataclass
@@ -18,6 +20,7 @@ class TranslationPair:
     source: str
     target: str
     target_name: str
+    similarity_score: Optional[float] = None
 
     def as_dict(self):
         return {
@@ -64,7 +67,8 @@ class TranslationPair:
 
     @property
     def contains_url(self):
-        pattern = re.compile(r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))")
+        pattern = re.compile(
+            r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))")
         return re.match(pattern, self.source) or re.match(pattern, self.target)
 
 
@@ -76,6 +80,8 @@ class TranslationDataset:
         self.source_name = source_name
         self.target_name = target_name
         self.pairs: List[TranslationPair] = []
+        self.embedder = CosineSimilarityEvaluator()
+        self.similarity_evaluated = False
 
     def __len__(self):
         return len(self.pairs)
@@ -87,7 +93,12 @@ class TranslationDataset:
         self.pairs = []
 
     def read_examples(self):
-        for source, target in tqdm(zip(self.source_reader.read_examples(), self.target_reader.read_examples())):
+        for source, target in tqdm(
+                zip(
+                    self.source_reader.read_examples(), self.target_reader.read_examples()
+                ),
+                total=self.source_reader.max_lines
+        ):
             pair = TranslationPair(
                 idx=str(uuid.uuid4()),
                 source_name=self.source_name,
@@ -106,7 +117,7 @@ class TranslationDataset:
         self.pairs = [pair for pair in self.pairs if (pair.n_target_chars > 15 and pair.n_source_chars > 15)]
 
     def filter_by_tokens(self):
-        self.pairs = [pair for pair in self.pairs if (pair.n_target_tokens > 3 and pair.n_source_tokens > 3)]
+        self.pairs = [pair for pair in self.pairs if ( 21 > pair.n_target_tokens > 3 and 21 > pair.n_source_tokens > 3)]
 
     def filter_by_n_token_diff(self):
         self.pairs = [pair for pair in self.pairs if pair.n_token_diff < 3]
@@ -116,6 +127,16 @@ class TranslationDataset:
 
     def filter_urls(self):
         self.pairs = [pair for pair in self.pairs if not pair.contains_url]
+
+    def evaluate_pairwise_similarity(self):
+        sources = [pair.source for pair in self.pairs]
+        targets = [pair.target for pair in self.pairs]
+        scores = self.embedder(sources, targets)
+
+        for pair, score in zip(self.pairs, scores):
+            pair.similarity_score = score
+
+        self.similarity_evaluated = True
 
     def downsample(self,
                    ratio: Optional[float] = None,
@@ -150,14 +171,32 @@ class TranslationDataset:
         pairs = [self.pairs[i] for i in indices_to_keep]
         self.pairs = pairs
 
+    def similarity_cutoff(self, threshold: float):
+        if not self.similarity_evaluated:
+            self.evaluate_pairwise_similarity()
+        self.pairs = [pair for pair in self.pairs if pair.similarity_score > threshold]
+
     def write_to_file(self, path):
         with open(path, "w") as file:
             for pair in self.pairs:
                 file.write(json.dumps(pair.as_dict(), ensure_ascii=False) + "\n")
 
 
-def longest_common_prefix(strings: List[str]) -> str:
+class CosineSimilarityEvaluator:
 
+    def __init__(self):
+        self.model = SentenceTransformer("sentence-transformers/LaBSE")
+
+    def __call__(self, sentences1, sentences2):
+        embeddings1 = self.model.encode(sentences1, convert_to_tensor=True, show_progress_bar=True)
+        embeddings2 = self.model.encode(sentences2, convert_to_tensor=True, show_progress_bar=True)
+
+        cosine_scores = util.pytorch_cos_sim(embeddings1, embeddings2)
+
+        return cosine_scores.diagonal(0).detach()
+
+
+def longest_common_prefix(strings: List[str]) -> str:
     if not strings:
         return ""
     if len(strings) == 1:

@@ -3,5 +3,10 @@ from dataclasses import dataclass
 
 @dataclass
 class BaseScore:
-    idx: int
+    idx: str
     score: float
+
+
+@dataclass
+class CosineSimilarityScore:
+    pass
