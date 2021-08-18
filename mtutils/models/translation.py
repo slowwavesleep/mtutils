@@ -1,16 +1,15 @@
 import json
 import random
 import math
-import re
 import uuid
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional
 
-import torch
 from rapidfuzz import fuzz
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer, util
+from urlextract import URLExtract
 
 
 @dataclass
@@ -65,12 +64,6 @@ class TranslationPair:
     def common_prefix_ratio(self):
         return self.longest_common_prefix_len / self.n_target_chars
 
-    @property
-    def contains_url(self):
-        pattern = re.compile(
-            r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))")
-        return re.match(pattern, self.source) or re.match(pattern, self.target)
-
 
 class TranslationDataset:
 
@@ -117,7 +110,7 @@ class TranslationDataset:
         self.pairs = [pair for pair in self.pairs if (pair.n_target_chars > 15 and pair.n_source_chars > 15)]
 
     def filter_by_tokens(self):
-        self.pairs = [pair for pair in self.pairs if ( 21 > pair.n_target_tokens > 3 and 21 > pair.n_source_tokens > 3)]
+        self.pairs = [pair for pair in self.pairs if (30 > pair.n_target_tokens > 5 and 30 > pair.n_source_tokens > 5)]
 
     def filter_by_n_token_diff(self):
         self.pairs = [pair for pair in self.pairs if pair.n_token_diff < 3]
@@ -126,7 +119,12 @@ class TranslationDataset:
         self.pairs = [pair for pair in self.pairs if pair.common_prefix_ratio < 0.3]
 
     def filter_urls(self):
-        self.pairs = [pair for pair in self.pairs if not pair.contains_url]
+        extractor = URLExtract()
+        tmp_pairs = []
+        for pair in tqdm(self.pairs):
+            if not (bool(extractor.find_urls(pair.source)) or bool(extractor.find_urls(pair.target))):
+                tmp_pairs.append(pair)
+        self.pairs = tmp_pairs
 
     def evaluate_pairwise_similarity(self):
         sources = [pair.source for pair in self.pairs]
