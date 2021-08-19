@@ -1,11 +1,11 @@
-from readers.single_reader import TxtReader
+from readers.single_reader import LinesReader
 from models.translation import TranslationDataset
 
 source_path = "data/paracrawl-release1.en-ru.zipporah0-dedup-clean.en"
 target_path = "data/paracrawl-release1.en-ru.zipporah0-dedup-clean.ru"
 
-source_reader = TxtReader(source_path, max_lines=500_000)
-target_reader = TxtReader(target_path, max_lines=500_000)
+source_reader = LinesReader(source_path, max_lines=500_000)
+target_reader = LinesReader(target_path, max_lines=500_000)
 
 dataset = TranslationDataset(
     source_reader=source_reader, target_reader=target_reader, source_name="en", target_name="ru"

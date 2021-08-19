@@ -2,11 +2,15 @@ from dataclasses import dataclass
 
 
 @dataclass
-class BaseScore:
+class ScoredExample:
     idx: str
-    score: float
+    source: str
+    hypothesis: str
+    bleu: float
+    chrf: float
+    ter: float
+    bert_score_f1: float
 
+    def as_dict(self):
+        return vars(self)
 
-@dataclass
-class CosineSimilarityScore:
-    pass
