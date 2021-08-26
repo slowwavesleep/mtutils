@@ -1,8 +1,7 @@
 import json
-from typing import Optional, Union, Sequence
+from typing import Optional
 from abc import ABC, abstractmethod
-
-from lxml.etree import iterparse
+import re
 
 
 class BaseReader(ABC):
@@ -39,16 +38,12 @@ class LinesReader(BaseReader):
 
 class XmlLinesReader(BaseReader):
 
-    def __init__(self, path: str, tags_to_keep: Union[str, Sequence[str]]):
+    def __init__(self, path: str, tag_to_keep: str):
         self.path = path
-        if isinstance(tags_to_keep, str):
-            self.tags_to_keep = [tags_to_keep]
-        else:
-            self.tags_to_keep = tags_to_keep
+        self.tag_to_keep = tag_to_keep
 
     def read_examples(self):
-        iter_tree = iterparse(self.path)
-        for _, element in iter_tree:
-            tag = element.tag
-            if tag in self.tags_to_keep:
-                yield element.text
+        with open(self.path) as file:
+            for line in file:
+                if line.startswith(self.tag_to_keep):
+                    yield re.sub(r"<[^>]+>", "", line).strip("\n")
