@@ -184,14 +184,29 @@ class CosineSimilarityEvaluator:
 
     def __init__(self):
         self.model = SentenceTransformer("sentence-transformers/LaBSE")
+        self.batch_size = 128
 
     def __call__(self, sentences1, sentences2):
+        assert len(sentences1) == len(sentences2)
+
         embeddings1 = self.model.encode(sentences1, convert_to_tensor=True, show_progress_bar=True)
         embeddings2 = self.model.encode(sentences2, convert_to_tensor=True, show_progress_bar=True)
 
-        cosine_scores = util.pytorch_cos_sim(embeddings1, embeddings2)
+        if len(sentences1) < self.batch_size:
+            cosine_scores = list(util.pytorch_cos_sim(embeddings1, embeddings2).diagonal(0).detach())
+        else:
+            cosine_scores = []
 
-        return cosine_scores.diagonal(0).detach()
+            for i in tqdm(range(0, len(sentences1), self.batch_size), total=len(sentences1)):
+                cosine_scores.extend(
+                    list(
+                        util.pytorch_cos_sim(
+                            embeddings1[i: i + self.batch_size], embeddings2[i: i + self.batch_size]
+                        ).diagonal(0).detach()
+                    )
+                )
+
+        return cosine_scores
 
 
 def longest_common_prefix(strings: List[str]) -> str:
